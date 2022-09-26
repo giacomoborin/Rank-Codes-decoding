@@ -1,0 +1,41 @@
+q := 2;
+m := 7;
+F<a> := GF(q,m);
+x := Random(F);
+SetPowerPrinting(F, false);
+
+base := [ a^i : i in [0..m-1]];
+
+k := 3;
+
+H := Matrix(F, [ [ mu^(q^j) : mu in base] : j in [k..m-1]]);
+
+
+n := m;
+
+function wRank(v)
+	/*
+	- v is a vector of GF(q,m)^h
+	- output the rank weight of v
+	*/
+	return Rank(Matrix(GF(q),[Eltseq(vi) : vi in v]));
+end function;
+
+t := 2;
+
+repeat
+	e := ([Random(F) : _ in [1..t]]);
+	Y := Matrix(GF(q), [[ Random(GF(q)) : _ in [1..n]]: _ in [1..t]]);
+until wRank(e) eq t and Rank(Y) eq t;
+
+function vect_to_matrix(v)
+	return Matrix(GF(q),[Eltseq(vi) : vi in v]);
+end function;
+
+function matrix_to_vect(V)
+	return [Seqelt(Eltseq(vi),F) : vi in Seqelt(V)];
+end function;
+
+e;
+matrix_to_vect(vect_to_matrix(e));
+
