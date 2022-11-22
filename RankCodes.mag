@@ -1,15 +1,27 @@
+// ------------------------------
+// ---- MRD Gabidulin codes -----
+// ------------------------------
+
 q := 2;
 m := 7;
+SetSeed(42);
 F<a> := GF(q,m);
-x := Random(F);
 SetPowerPrinting(F, false);
+R<z> := PolynomialRing(F);
 
+// Here we need to generate a base for the extension field F_{q^m} : F_q
 base := [ a^i : i in [0..m-1]];
 
 k := 3;
+d := m - k + 1; // min dist for MRD codes
 
+// generation of the generator matrix
+
+// generation of the parity check matrix n x (m-k)
 H := Matrix(F, [ [ mu^(q^j) : mu in base] : j in [k..m-1]]);
 
+// generation of the generator matrix n x k
+G := ParityCheckMatrix(LinearCode(H));
 
 n := m;
 
@@ -18,24 +30,150 @@ function wRank(v)
 	- v is a vector of GF(q,m)^h
 	- output the rank weight of v
 	*/
-	return Rank(Matrix(GF(q),[Eltseq(vi) : vi in v]));
+	return Rank(Matrix(GF(q),[Eltseq(vi) : vi in Eltseq(v)]));
 end function;
 
 t := 2;
 
 repeat
 	e := ([Random(F) : _ in [1..t]]);
-	Y := Matrix(GF(q), [[ Random(GF(q)) : _ in [1..n]]: _ in [1..t]]);
+	Y := Matrix(F, [[ Random(GF(q)) : _ in [1..n]]: _ in [1..t]]);
 until wRank(e) eq t and Rank(Y) eq t;
+
+// Now e = [E_1, ... , E_t] in GF(q,m) independent over F_q and Y n x t matrix of rank t
+
+
+
+// ------------------------------
 
 function vect_to_matrix(v)
 	return Matrix(GF(q),[Eltseq(vi) : vi in v]);
 end function;
-
 function matrix_to_vect(V)
-	return [Seqelt(Eltseq(vi),F) : vi in Seqelt(V)];
+	//return [Seqelt(Eltseq(vi),F) : vi in Seqelt(V)];
+	return [ F!s : s in RowSequence(V)];
+end function;
+//e;
+//matrix_to_vect(vect_to_matrix(e));
+
+// ------------------------------
+
+
+
+function decoding(y,H)
+	/*
+	- y recived vector in F^n
+	- H parity check matrix n x (n -k) in F
+	*/
+	// step 1
+	s := y*Transpose(H);
+	S := &+[ s[i+1]*(z^(Modexp(q,i,m))) : i in [0..d-2]];
+	// step 3
 end function;
 
-e;
-matrix_to_vect(vect_to_matrix(e));
+function BerlekampMassey_VectorRank(S)
+	// S is the syndrome as vector in F^(d-1)
+	L := 0;
+	/*
+	 *Delta := [ Zero(R) : _ in [1..d+1]];
+	 *B := [ Zero(R) : _ in [1..d+1]];
+	 */
+	r := 0;
+	Delta:=z;
+	B:= z;
+
+	while r le d-2 do
+		// attention : r start from 0 but arrays in MAGMA from 1, so always use r+1 for the index
+		// attention : delta is a linearized polynomial so to get Delta_i we mean the coefficient of z^(Modexp(q,i,m))
+		D := Eltseq(Delta);
+		if L le 0 then
+			Delta_r := S[r+1];
+		else
+			Delta_r := S[r+1] + 
+			&+[ 
+			D[Modexp(q,j,q^m - 1)+1]*
+			(S[r-j+1]^Modexp(q,j,q^m - 1))
+			: j in [1..L] ];
+
+		end if;
+		if Delta_r ne 0 then
+			buff := Delta;
+			// Oss: f \otimes g = Evaluate(f,g)
+			Delta := buff - 
+			Evaluate(Delta_r*z^q, B);
+
+			if 2*L gt r then
+				B := Evaluate(z^q, B);
+			else
+				B := buff/Delta_r;
+				L := r+1-L;
+			end if;
+		else
+			B := Evaluate(z^q, B);
+		end if;
+		r := r+1;
+	end while;
+	return Delta;
+end function;
+
+function Root_LinPol(L)
+	M := Matrix(GF(q), [Eltseq(Evaluate(L,a^i)) : i in [0..m-1]]);
+	SOL := KernelMatrix(M);
+	// PROBLEM here I'm just using t as assumed dimension of the kernel. This should be the right one however this can cause problems.
+	return [ F!Eltseq(SOL[i]) : i in [1..t]];
+end function;
+
+
+function decoding_Massey(y,H)
+	/*
+	- y recived vector in F^n
+	- H parity check matrix n x (n-k) in F
+	*/
+	// step 1
+	S := y*Transpose(H);
+	// S := &+[ s[i+1]*(z^(Modexp(q,i,m))) : i in [0..d-2]];
+	Delta := BerlekampMassey_VectorRank(S);
+	// Roots(Delta);
+	E := Root_LinPol(Delta);
+	// Let's create the system:
+	S_pow := Vector([S[p+1]^Modexp(q,-p,q^m-1) : p in [0..d-2]]);
+
+	E_matrix := Transpose(Matrix(F,
+	[
+	[E[j]^Modexp(q,-p,q^m-1) : j in [1..t]] 
+	: p in [0..d-2]]
+	));
+
+	Z_vect := Solution(E_matrix, S_pow);
+
+	Z_matrix := [Vector([Z_vect[i]^Modexp(q,j,q^m-1)  : j in [0..d-2] ]) : i in [1..t]];
+
+	
+	Y := [];
+	// ----- Tentativo sol in GF(q)
+
+	for i in [1..t] do
+		M := Matrix(F,m+1,d-1,
+			Eltseq(Transpose(H)) cat Eltseq(-Z_matrix[i]));
+		Ker := Kernel(M);
+		SUB := RestrictField(Ker,GF(q));
+		sol := SetToIndexedSet(Generators(SUB))[1];
+		sol := sol/sol[m+1];
+		sol := (Eltseq(sol)[1..m]);
+		Append(~Y,sol);
+	end for;
+	e := Vector(E)*Matrix(F,Y);
+	return e;
+end function;
+
+c := Vector([Random(F) : _ in [1..k]])*G;
+
+
+c[4] +:= 1 + a^6;
+c[6] +:= a + a^2 + a^5 ;
+
+"Output massey:";
+e := decoding_Massey(c,H);
+e, wRank(e);
+"\n";
 
