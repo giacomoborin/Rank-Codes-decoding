@@ -163,14 +163,16 @@ function decoding_Massey(y,H)
 		Append(~Y,sol);
 	end for;
 	e := Vector(E)*Matrix(F,Y);
+	//Vector(E);
+	//Matrix(F,Y);
 	return e;
 end function;
 
 c := Vector([Random(F) : _ in [1..k]])*G;
 
 
-c[4] +:= 1 + a^6;
-c[6] +:= a + a^2 + a^5 ;
+c[1] +:= 1 + a^6;
+c[2] +:= a + a^2 + a^5 ;
 
 "Output massey:";
 e := decoding_Massey(c,H);
