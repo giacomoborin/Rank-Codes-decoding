@@ -1,0 +1,47 @@
+// Declaration of code variables and instances
+q := 2;
+m := 7;
+SetSeed(42);
+F<a> := GF(q,m);
+SetPowerPrinting(F, false);
+R<z> := PolynomialRing(F);
+k:=3;
+d := n - k +1;
+r := (d-1) div 2;
+// generation of the parity check matrix n x (m-k)
+H := Matrix(F, [ [ mu^(q^j) : mu in base] : j in [k..m-1]]);
+// generation of the generator matrix n x k
+G := ParityCheckMatrix(LinearCode(H));
+
+
+function ISD_GB(H,y)
+Cdual := LinearCode(H);
+C := Dual(C);
+
+// declaration of the variables
+R<[x]>:=PolynomialRing(F,10);
+
+
+// construction of FF
+// using OJ modelling
+
+v := Vector([a^i : i in [0..m-1]]);
+/* S is mxr with form:
+	|  I_r   |
+	| 0 | S' |
+*/
+S := ZeroMatrix(R,m,r);
+InsertBlock(~S,IdentityMatrix(R,r),1,1);
+// now s_i,j will be x[1],...,x[(m-r)*(r-1)]
+S_x := Matrix(R,m-r,r-1,[ x[i] : i in [1..(m-r)*(r-1)]]);
+InsertBlock(~S,S_x,r+1,2);
+
+
+// construction of FF_q
+// field equations
+FFq := [];
+// append s_i,j^q - s_i,j
+// append c_i,j^q - c_i,j
+
+
+end function;
