@@ -1,19 +1,18 @@
 // Declaration of code variables and instances
 q := 2;
 m := 7;
+n := 7;
 SetSeed(42);
 F<a> := GF(q,m);
 SetPowerPrinting(F, false);
 R<z> := PolynomialRing(F);
-n := m;
 k:=3;
 d := m - k +1;
-r := (d-1) div 2;
 // generation of the parity check matrix n x (m-k)
 
 
 
-function ISD_GB(y,H)
+function ISD_GB(y,H,r)
 	Cdual := LinearCode(H);
 	C := Dual(Cdual) + LinearCode(y);
 
@@ -40,7 +39,7 @@ function ISD_GB(y,H)
 	S_x := Matrix(R,m-r,r-1,[ x[i] : i in [1..s_max]]);
 	InsertBlock(~S,S_x,r+1,2);
 
-	RR := Submatrix(ChangeRing(GeneratorMatrix(C),R),[1..k+1],[k+2..m]);
+	RR := Submatrix(ChangeRing(GeneratorMatrix(C),R),[1..k+1],[k+2..n]);
 	
 	CC2 := Matrix(R,r,n-k-1,[ x[i] : i in [c2_min..c2_max]]);
 	CC1_x := Matrix(R,r,k,[ x[i] : i in [c1_min..c1_max]]);
@@ -54,19 +53,16 @@ function ISD_GB(y,H)
 	// construction of FF_q
 	// field equations
 	FFq := [ x[i]^q - x[i] : i in [1..c1_max]];
-	// append s_i,j^q - s_i,j
-	// append c_i,j^q - c_i,j
 
 	SetVerbose("Groebner",1); 
 	GB := GroebnerBasis(FF cat FFq);
+	GB;
 
 	ev := [F!(GB[i]- x[i]) : i in [1..c1_max]];
 	S := ZeroMatrix(F,m,r);
 	InsertBlock(~S,IdentityMatrix(F,r),1,1);
-	// now s_i,j will be x[1],...,x[(m-r)*(r-1)] 
 	S_e := Matrix(F,m-r,r-1,ev[1..s_max]);
 	InsertBlock(~S,S_e,r+1,2);
-	//RR := Submatrix(ChangeRing(GeneratorMatrix(C),R),[1..k+1],[k+2..m]);
 	
 	CC2 := Matrix(F,r,n-k-1,ev[c2_min..c2_max]);
 	CC1_e := Matrix(F,r,k,ev[c1_min..c1_max]);
@@ -78,21 +74,25 @@ function ISD_GB(y,H)
 	InsertBlock(~CC,CC2,1,k+2);
 
 	E := v*S*(CC);
+	ls := E*Transpose(H);
+	s := y*Transpose(H);
+	E := E*DotProduct(s,s)/DotProduct(ls,s);
 
 	return E;
 end function;
 
-base := [ a^i : i in [0..m-1]];
-H := Matrix(F, [ [ mu^(q^j) : mu in base] : j in [k..m-1]]);
+base := [ a^i : i in [0..n-1]];
+H := Matrix(F, [ [ mu^(q^j) : mu in base] : j in [k..n-1]]);
 // generation of the generator matrix n x k
 G := ParityCheckMatrix(LinearCode(H));
 c := Vector([Random(F) : _ in [1..k]])*G;
 
 // Problem: we need S with the first rxr block inv
-c[1] +:= 1 ;
-c[2] +:= a ;
+c[1] +:= 1;
+c[2] +:= a;
+//c[3] +:= a^2 + a;
 
 "Output massey:";
-e := ISD_GB(c,H);
+e := ISD_GB(c,H,2);
 e;//, wRank(e);
 "\n";
