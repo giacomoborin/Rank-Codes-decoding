@@ -1,7 +1,7 @@
 // Declaration of code variables and instances
 q := 2;
-m := 7;
-n := 7;
+m := 25;
+n := m;
 SetSeed(42);
 F<a> := GF(q,m);
 SetPowerPrinting(F, false);
@@ -10,7 +10,9 @@ k:=3;
 d := m - k +1;
 // generation of the parity check matrix n x (m-k)
 
-
+function Setseq(S)
+	return IndexedSetToSequence(SetToIndexedSet(S));
+end function;
 
 function ISD_GB(y,H,r)
 	Cdual := LinearCode(H);
@@ -46,6 +48,10 @@ function ISD_GB(y,H,r)
 	CC1 := ZeroMatrix(R,r,k+1);
 	InsertBlock(~CC1,CC1_x,1,2);
 	CC1[1,1] := 1;
+	CC := ZeroMatrix(R,r,n);
+	InsertBlock(~CC,CC1,1,1);
+	InsertBlock(~CC,CC2,1,k+2);
+
 
 	Eq := v*S*(CC2 - CC1*RR);
 	FF := Eltseq(Eq);
@@ -54,16 +60,67 @@ function ISD_GB(y,H,r)
 	// field equations
 	FFq := [ x[i]^q - x[i] : i in [1..c1_max]];
 
-	SetVerbose("Groebner",1); 
-	GB := GroebnerBasis(FF cat FFq);
-	GB;
+	// Max Rank
+	nu := Binomial(n,r);
+	SET := {1..n};
+	r_sets := SetToIndexedSet(Subsets(SET,r));
+	ord := [ j : j in [1..nu] | 1 in r_sets[j]];
+	ord :=  [ j : j in [1..nu] | not j in ord] cat ord;
+	r_sets := r_sets[ord];
+	T := [ Determinant(ColumnSubmatrix(CC,Setseq(T))) : T in r_sets];
+	mu := m*Binomial(n-k-1,r);
+	SET := {k+2..n};
+	J_sets := SetToIndexedSet(Subsets(SET,r));
+
+	function M(ii,t)
+		T1 := r_sets[t];
+		T2 := r_sets[t] meet {k+2..n};
+		JJ := J_sets[(ii - 1)  div m + 1];
+		if T2 subset JJ then
+			y_cord := Setseq(JJ diff T2);
+			y_cord := [ y - k - 1 : y in y_cord];
+			x_cord := Setseq(T1 meet {1..k+1});
+			beta := F!Determinant(Submatrix(RR,x_cord,y_cord));
+			// sigma is def at page 17
+			// d := #JJ - #T2;
+			// 
+			// beta := sigma*beta
+			return Eltseq(beta)[(ii - 1) mod m + 1];
+		else 
+			return 0;
+		end if;
+	end function;
+
+	M := Matrix(F,
+	[ [
+		M(ii,t)
+	: t in [1..nu]] : ii in [1..mu]]);
+
+	MaxMin := Eltseq(
+		Vector(T)*Transpose(ChangeRing(EchelonForm(M),R))
+	);
+
+	JJ := [MaxMin[i] : i in [1..mu] | Degree(MaxMin[i]) eq r-1];
+	if IsEmpty(JJ) then
+		JJ := [MaxMin[i] : i in [1..mu] | Degree(MaxMin[i]) eq r];
+	end if;
+
+	if mu ge (nu-1) then
+		d := r;
+	elif mu le Binomial(n-1,r) then
+		d := r+2;
+	else
+		d := r ; // or r+1, I don't understand why
+	end if;
+	
+	//SetVerbose("Groebner",1); 
+	GB := GroebnerBasis(FF cat FFq cat JJ);
 
 	ev := [F!(GB[i]- x[i]) : i in [1..c1_max]];
 	S := ZeroMatrix(F,m,r);
 	InsertBlock(~S,IdentityMatrix(F,r),1,1);
 	S_e := Matrix(F,m-r,r-1,ev[1..s_max]);
 	InsertBlock(~S,S_e,r+1,2);
-	
 	CC2 := Matrix(F,r,n-k-1,ev[c2_min..c2_max]);
 	CC1_e := Matrix(F,r,k,ev[c1_min..c1_max]);
 	CC1 := ZeroMatrix(F,r,k+1);
@@ -72,7 +129,6 @@ function ISD_GB(y,H,r)
 	CC := ZeroMatrix(F,r,n);
 	InsertBlock(~CC,CC1,1,1);
 	InsertBlock(~CC,CC2,1,k+2);
-
 	E := v*S*(CC);
 	ls := E*Transpose(H);
 	s := y*Transpose(H);
@@ -90,7 +146,7 @@ c := Vector([Random(F) : _ in [1..k]])*G;
 // Problem: we need S with the first rxr block inv
 c[1] +:= 1;
 c[2] +:= a;
-//c[3] +:= a^2 + a;
+/*c[3] +:= a^2 + a;*/
 
 "Output massey:";
 e := ISD_GB(c,H,2);
