@@ -3,7 +3,7 @@
 // ------------------------------
 
 q := 2;
-m := 7;
+m := 510;
 SetSeed(42);
 F<a> := GF(q,m);
 SetPowerPrinting(F, false);
@@ -15,7 +15,6 @@ base := [ a^i : i in [0..m-1]];
 k := 3;
 d := m - k + 1; // min dist for MRD codes
 
-// generation of the generator matrix
 
 // generation of the parity check matrix n x (m-k)
 H := Matrix(F, [ [ mu^(q^j) : mu in base] : j in [k..m-1]]);
@@ -33,45 +32,10 @@ function wRank(v)
 	return Rank(Matrix(GF(q),[Eltseq(vi) : vi in Eltseq(v)]));
 end function;
 
-t := 2;
-
-repeat
-	e := ([Random(F) : _ in [1..t]]);
-	Y := Matrix(F, [[ Random(GF(q)) : _ in [1..n]]: _ in [1..t]]);
-until wRank(e) eq t and Rank(Y) eq t;
-
-// Now e = [E_1, ... , E_t] in GF(q,m) independent over F_q and Y n x t matrix of rank t
 
 
 
-// ------------------------------
-
-function vect_to_matrix(v)
-	return Matrix(GF(q),[Eltseq(vi) : vi in v]);
-end function;
-function matrix_to_vect(V)
-	//return [Seqelt(Eltseq(vi),F) : vi in Seqelt(V)];
-	return [ F!s : s in RowSequence(V)];
-end function;
-//e;
-//matrix_to_vect(vect_to_matrix(e));
-
-// ------------------------------
-
-
-
-function decoding(y,H)
-	/*
-	- y recived vector in F^n
-	- H parity check matrix n x (n -k) in F
-	*/
-	// step 1
-	s := y*Transpose(H);
-	S := &+[ s[i+1]*(z^(Modexp(q,i,m))) : i in [0..d-2]];
-	// step 3
-end function;
-
-function BerlekampMassey_VectorRank(S)
+function BerlekampMassey_VectorRank(S,t)
 	// S is the syndrome as vector in F^(d-1)
 	L := 0;
 	/*
@@ -81,6 +45,7 @@ function BerlekampMassey_VectorRank(S)
 	r := 0;
 	Delta:=z;
 	B:= z;
+	d := 2*t + 1;
 
 	while r le d-2 do
 		// attention : r start from 0 but arrays in MAGMA from 1, so always use r+1 for the index
@@ -99,42 +64,45 @@ function BerlekampMassey_VectorRank(S)
 		if Delta_r ne 0 then
 			buff := Delta;
 			// Oss: f \otimes g = Evaluate(f,g)
+			// in our case f = z^q, so it is enough
+			// to elevate to q
 			Delta := buff - 
-			Evaluate(Delta_r*z^q, B);
+			Delta_r*(B)^q;
 
 			if 2*L gt r then
-				B := Evaluate(z^q, B);
+				B := (B)^q;
 			else
 				B := buff/Delta_r;
 				L := r+1-L;
 			end if;
 		else
-			B := Evaluate(z^q, B);
+			B := (B)^q;
 		end if;
 		r := r+1;
 	end while;
 	return Delta;
 end function;
 
-function Root_LinPol(L)
+function Root_LinPol(L,t)
+	// Since the evaluation can be seen as a matrix multiplication
+	// on the base fields we simply have to evaluate a kernel
 	M := Matrix(GF(q), [Eltseq(Evaluate(L,a^i)) : i in [0..m-1]]);
 	SOL := KernelMatrix(M);
-	// PROBLEM here I'm just using t as assumed dimension of the kernel. This should be the right one however this can cause problems.
 	return [ F!Eltseq(SOL[i]) : i in [1..t]];
 end function;
 
 
-function decoding_Massey(y,H)
+function decoding_Massey(y,H,t)
 	/*
 	- y recived vector in F^n
 	- H parity check matrix n x (n-k) in F
+	- t rank of the error
 	*/
-	// step 1
 	S := y*Transpose(H);
-	// S := &+[ s[i+1]*(z^(Modexp(q,i,m))) : i in [0..d-2]];
-	Delta := BerlekampMassey_VectorRank(S);
-	// Roots(Delta);
-	E := Root_LinPol(Delta);
+	// Evaluation of the linearized polynomial
+	Delta := BerlekampMassey_VectorRank(S,t);
+	// Evaluation of its roots using linear algebra 
+	E := Root_LinPol(Delta,t);
 	// Let's create the system:
 	S_pow := Vector([S[p+1]^Modexp(q,-p,q^m-1) : p in [0..d-2]]);
 
@@ -149,9 +117,15 @@ function decoding_Massey(y,H)
 	Z_matrix := [Vector([Z_vect[i]^Modexp(q,j,q^m-1)  : j in [0..d-2] ]) : i in [1..t]];
 
 	
+	/* Calculation of Y
+	since it is necessary to consider only the solutions in 
+	the base field we need to:
+	- Look at the kernel of H | z
+	- Restrict it to F_q
+	- Get an element x such that x_m+1 = 1
+	- (x_1, ..., x_m) is the solution
+	*/
 	Y := [];
-	// ----- Tentativo sol in GF(q)
-
 	for i in [1..t] do
 		M := Matrix(F,m+1,d-1,
 			Eltseq(Transpose(H)) cat Eltseq(-Z_matrix[i]));
@@ -162,9 +136,8 @@ function decoding_Massey(y,H)
 		sol := (Eltseq(sol)[1..m]);
 		Append(~Y,sol);
 	end for;
+
 	e := Vector(E)*Matrix(F,Y);
-	//Vector(E);
-	//Matrix(F,Y);
 	return e;
 end function;
 
@@ -175,7 +148,7 @@ c[1] +:= 1 + a^6;
 c[2] +:= a + a^2 + a^5 ;
 
 "Output massey:";
-e := decoding_Massey(c,H);
+e := decoding_Massey(c,H,2);
 e, wRank(e);
 "\n";
 

@@ -1,33 +1,34 @@
 // Declaration of code variables and instances
 q := 2;
-m := 25;
+m := 15;
 n := m;
 SetSeed(42);
 F<a> := GF(q,m);
 SetPowerPrinting(F, false);
-R<z> := PolynomialRing(F);
 k:=3;
-d := m - k +1;
-// generation of the parity check matrix n x (m-k)
 
 function Setseq(S)
 	return IndexedSetToSequence(SetToIndexedSet(S));
 end function;
 
 function ISD_GB(y,H,r)
+
+	// Generation of the code containing the error
 	Cdual := LinearCode(H);
 	C := Dual(Cdual) + LinearCode(y);
 
 	// declaration of the variables
+	// now s_i,j will be x[1],...,x[s_max] 
 	s_max := (m-r)*(r-1);
+	// now c_i,j will be x[c2_min],...,x[c1_max] 
 	c2_min := s_max + 1;
 	c2_max := s_max + r*(n-k-1);
 	c1_min := c2_max + 1;
 	c1_max := c2_max + r*k;
-	R<[x]>:=PolynomialRing(F,c1_max);
+	R<[x]>:=PolynomialRing(F,c1_max,"grevlex");
 
 
-	// construction of FF
+	// construction of FF (the equations)
 	// using OJ modelling
 
 	v := Vector([a^i : i in [0..m-1]]);
@@ -37,13 +38,22 @@ function ISD_GB(y,H,r)
 	*/
 	S := ZeroMatrix(R,m,r);
 	InsertBlock(~S,IdentityMatrix(R,r),1,1);
-	// now s_i,j will be x[1],...,x[(m-r)*(r-1)] 
 	S_x := Matrix(R,m-r,r-1,[ x[i] : i in [1..s_max]]);
 	InsertBlock(~S,S_x,r+1,2);
 
+	/* RR is the matrix such that
+		G = | I_{k+1} | RR |
+	   where G is the generator matrix of <C,y>
+	*/
 	RR := Submatrix(ChangeRing(GeneratorMatrix(C),R),[1..k+1],[k+2..n]);
 	
 	CC2 := Matrix(R,r,n-k-1,[ x[i] : i in [c2_min..c2_max]]);
+
+	/* Here we create the matrix
+		    |1|	      |     |
+		C = |0| CC1_x | CC2 |
+		    |0|       |     |
+	*/
 	CC1_x := Matrix(R,r,k,[ x[i] : i in [c1_min..c1_max]]);
 	CC1 := ZeroMatrix(R,r,k+1);
 	InsertBlock(~CC1,CC1_x,1,2);
@@ -51,27 +61,29 @@ function ISD_GB(y,H,r)
 	CC := ZeroMatrix(R,r,n);
 	InsertBlock(~CC,CC1,1,1);
 	InsertBlock(~CC,CC2,1,k+2);
-
-
+	
+	// Generation of equations
 	Eq := v*S*(CC2 - CC1*RR);
 	FF := Eltseq(Eq);
 
-	// construction of FF_q
-	// field equations
+	// construction of FF_q (field equations)
 	FFq := [ x[i]^q - x[i] : i in [1..c1_max]];
 
-	// Max Rank
+	// construction of MaxMinors(C2 - C1*R)
 	nu := Binomial(n,r);
 	SET := {1..n};
 	r_sets := SetToIndexedSet(Subsets(SET,r));
+	// reordering to have the equations with degree r-1 first
 	ord := [ j : j in [1..nu] | 1 in r_sets[j]];
 	ord :=  [ j : j in [1..nu] | not j in ord] cat ord;
 	r_sets := r_sets[ord];
+	// T contains the "variables" det(C*,T)
 	T := [ Determinant(ColumnSubmatrix(CC,Setseq(T))) : T in r_sets];
 	mu := m*Binomial(n-k-1,r);
 	SET := {k+2..n};
 	J_sets := SetToIndexedSet(Subsets(SET,r));
 
+	// Now we need to construct the equations for our MaxMinors through an auxiliary matrix
 	function M(ii,t)
 		T1 := r_sets[t];
 		T2 := r_sets[t] meet {k+2..n};
@@ -81,16 +93,24 @@ function ISD_GB(y,H,r)
 			y_cord := [ y - k - 1 : y in y_cord];
 			x_cord := Setseq(T1 meet {1..k+1});
 			beta := F!Determinant(Submatrix(RR,x_cord,y_cord));
-			// sigma is def at page 17
-			// d := #JJ - #T2;
-			// 
-			// beta := sigma*beta
+			// sigma is def at page 17, not necessary for q = 2
+			/*
+			 *d := #JJ - #T2;
+			 *if IsEmpty(T2) then
+			 *        sum := 0;
+			 *else
+			 *        sum := &+[ Index(SetToIndexedSet(JJ),t) : t in T2];
+			 *end if;
+			 *sigma := d*(k+r) + ((d-1)*d) div 2 + sum;
+			 *beta := ((-1)^sigma) * beta;
+			 */
 			return Eltseq(beta)[(ii - 1) mod m + 1];
 		else 
 			return 0;
 		end if;
 	end function;
 
+	// definition of M and evaluation of echelon form to get the equations
 	M := Matrix(F,
 	[ [
 		M(ii,t)
@@ -108,15 +128,21 @@ function ISD_GB(y,H,r)
 	if mu ge (nu-1) then
 		d := r;
 	elif mu le Binomial(n-1,r) then
+
 		d := r+2;
 	else
-		d := r ; // or r+1, I don't understand why
+		d := r+1 ; // or r
 	end if;
 	
+	// Groebner basis calculation
 	//SetVerbose("Groebner",1); 
 	GB := GroebnerBasis(FF cat FFq cat JJ);
 
+	// extraction of the values for the variables
 	ev := [F!(GB[i]- x[i]) : i in [1..c1_max]];
+
+
+	// Reevaluation of all the matrices to get the error
 	S := ZeroMatrix(F,m,r);
 	InsertBlock(~S,IdentityMatrix(F,r),1,1);
 	S_e := Matrix(F,m-r,r-1,ev[1..s_max]);
@@ -130,6 +156,8 @@ function ISD_GB(y,H,r)
 	InsertBlock(~CC,CC1,1,1);
 	InsertBlock(~CC,CC2,1,k+2);
 	E := v*S*(CC);
+
+	// Evaluation of the error (remove of lambda)
 	ls := E*Transpose(H);
 	s := y*Transpose(H);
 	E := E*DotProduct(s,s)/DotProduct(ls,s);
@@ -143,9 +171,9 @@ H := Matrix(F, [ [ mu^(q^j) : mu in base] : j in [k..n-1]]);
 G := ParityCheckMatrix(LinearCode(H));
 c := Vector([Random(F) : _ in [1..k]])*G;
 
-// Problem: we need S with the first rxr block inv
+// Remark: we need S with the first rxr block inv
 c[1] +:= 1;
-c[2] +:= a;
+c[2] +:= 1+ a + a^2;
 /*c[3] +:= a^2 + a;*/
 
 "Output massey:";
