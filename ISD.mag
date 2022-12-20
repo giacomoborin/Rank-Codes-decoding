@@ -172,8 +172,8 @@ G := ParityCheckMatrix(LinearCode(H));
 c := Vector([Random(F) : _ in [1..k]])*G;
 
 // Remark: we need S with the first rxr block inv
-c[1] +:= 1;
-c[2] +:= 1+ a + a^2;
+c[1] +:= 1 ;
+c[2] +:= 1+ a + a^2 + a^5;
 /*c[3] +:= a^2 + a;*/
 
 "Output massey:";
